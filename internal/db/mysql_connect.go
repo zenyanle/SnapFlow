@@ -9,7 +9,7 @@ import (
 
 func ConnectDatabase() *sql.DB {
 	// 数据库连接信息 (替换成你的实际信息)
-	dsn := "user:password@tcp(127.0.0.1:3306)/database_name?charset=utf8mb4&parseTime=True&loc=Local"
+	dsn := "user:password@tcp(127.0.0.1:4002)/test?charset=utf8mb4&parseTime=True&loc=Local"
 
 	// 打开数据库连接
 	db, err := sql.Open("mysql", dsn)

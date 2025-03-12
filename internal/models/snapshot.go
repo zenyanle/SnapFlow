@@ -1,6 +1,8 @@
 package models
 
 import (
+	"encoding/json"
+	"fmt"
 	"time"
 )
 
@@ -195,4 +197,61 @@ func (s *Snapshot) SetApplicationStats(apps []ApplicationCount) {
 	s.Application = ApplicationStats{
 		Apps: apps,
 	}
+}
+
+// ToJSON 将 Snapshot 序列化为格式化的 JSON 字符串
+func (s *Snapshot) ToJSON() (string, error) {
+	// 创建一个可读性更强的时间格式转换
+	type jsonSnapshot struct {
+		Timestamp string     `json:"timestamp"`
+		Basic     BasicStats `json:"basic"`
+		IP        IPStats    `json:"ip"`
+		MAC       MACStats   `json:"mac"`
+		Port      PortStats  `json:"port"`
+		Protocol  struct {
+			Protocols []ProtocolCount `json:"protocols"`
+		} `json:"protocol"`
+		Application struct {
+			Apps []ApplicationCount `json:"apps"`
+		} `json:"application"`
+		TCPFlags struct {
+			Flags []TCPFlagCount `json:"flags"`
+		} `json:"tcp_flags"`
+	}
+
+	// 创建JSON结构
+	jsonData := jsonSnapshot{
+		Timestamp: time.Now().UTC().Format("2006-01-02 15:04:05"),
+		Basic:     s.Basic,
+		IP:        s.IP,
+		MAC:       s.MAC,
+		Port:      s.Port,
+	}
+
+	// 复制Protocol数据
+	jsonData.Protocol.Protocols = s.Protocol.Protocols
+
+	// 复制Application数据
+	jsonData.Application.Apps = s.Application.Apps
+
+	// 复制TCPFlags数据
+	jsonData.TCPFlags.Flags = s.TCPFlags.Flags
+
+	// 序列化为带缩进的JSON
+	jsonBytes, err := json.MarshalIndent(jsonData, "", "  ")
+	if err != nil {
+		return "", fmt.Errorf("序列化Snapshot失败: %w", err)
+	}
+
+	return string(jsonBytes), nil
+}
+
+// ToCompactJSON 将 Snapshot 序列化为紧凑的 JSON 字符串
+func (s *Snapshot) ToCompactJSON() (string, error) {
+	jsonBytes, err := json.Marshal(s)
+	if err != nil {
+		return "", fmt.Errorf("序列化Snapshot失败: %w", err)
+	}
+
+	return string(jsonBytes), nil
 }
