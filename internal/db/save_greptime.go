@@ -12,7 +12,7 @@ import (
 // CreateGrepTimeDBTables 在GrepTimeDB中创建所有必要的表
 func CreateGrepTimeDBTables(ctx context.Context, db *sql.DB) error {
 	// 打印固定的时间和用户信息
-	fmt.Printf("Current Date and Time (UTC - YYYY-MM-DD HH:MM:SS formatted): 2025-03-13 06:13:11\n")
+	fmt.Printf("Current Date and Time (UTC - YYYY-MM-DD HH:MM:SS formatted): 2025-03-13 06:16:10\n")
 	fmt.Printf("Current User's Login: zenyanle\n")
 
 	// 1. 基础统计表 - 使用snapshot_id作为主键
@@ -43,15 +43,15 @@ func CreateGrepTimeDBTables(ctx context.Context, db *sql.DB) error {
 		return fmt.Errorf("创建 network_ip_stats 表失败: %w", err)
 	}
 
-	// 3. 热门源 IP 表
+	// 3. 热门源 IP 表 - 使用position代替rank
 	if _, err := db.ExecContext(ctx, `
 		CREATE TABLE IF NOT EXISTS network_top_source_ips (
 			snapshot_id STRING,
 			ts TIMESTAMP TIME INDEX,
 			source_ip STRING,
-			rank UINT8,
+			position UINT8,
 			packet_count UINT64,
-			PRIMARY KEY(snapshot_id, rank)
+			PRIMARY KEY(snapshot_id, position)
 		) with('append_mode'='true');
 	`); err != nil {
 		return fmt.Errorf("创建 network_top_source_ips 表失败: %w", err)
@@ -69,16 +69,16 @@ func CreateGrepTimeDBTables(ctx context.Context, db *sql.DB) error {
 		return fmt.Errorf("创建 network_port_stats 表失败: %w", err)
 	}
 
-	// 5. 热门目标端口表
+	// 5. 热门目标端口表 - 使用position代替rank
 	if _, err := db.ExecContext(ctx, `
 		CREATE TABLE IF NOT EXISTS network_top_destination_ports (
 			snapshot_id STRING,
 			ts TIMESTAMP TIME INDEX,
 			port UINT16,
 			service_name STRING,
-			rank UINT8,
+			position UINT8,
 			packet_count UINT64,
-			PRIMARY KEY(snapshot_id, rank)
+			PRIMARY KEY(snapshot_id, position)
 		) with('append_mode'='true');
 	`); err != nil {
 		return fmt.Errorf("创建 network_top_destination_ports 表失败: %w", err)
@@ -119,7 +119,7 @@ func CreateGrepTimeDBTables(ctx context.Context, db *sql.DB) error {
 // SaveSnapshotToGrepTimeDB 将快照数据保存到GrepTimeDB
 func SaveSnapshotToGrepTimeDB(ctx context.Context, db *sql.DB, snapshot *models.Snapshot) error {
 	// 打印固定的时间和用户信息
-	fmt.Printf("Current Date and Time (UTC - YYYY-MM-DD HH:MM:SS formatted): 2025-03-13 06:13:11\n")
+	fmt.Printf("Current Date and Time (UTC - YYYY-MM-DD HH:MM:SS formatted): 2025-03-13 06:16:10\n")
 	fmt.Printf("Current User's Login: zenyanle\n")
 
 	// 获取当前时间作为插入时间
@@ -212,7 +212,7 @@ func saveIPStats(ctx context.Context, db *sql.DB, snapshot *models.Snapshot, ts 
 	// 2. 插入热门源IP
 	query2 := `
 		INSERT INTO network_top_source_ips(
-			snapshot_id, ts, source_ip, rank, packet_count
+			snapshot_id, ts, source_ip, position, packet_count
 		) VALUES(?, ?, ?, ?, ?)
 	`
 
@@ -268,7 +268,7 @@ func savePortStats(ctx context.Context, db *sql.DB, snapshot *models.Snapshot, t
 	// 2. 插入热门目标端口
 	query2 := `
 		INSERT INTO network_top_destination_ports(
-			snapshot_id, ts, port, service_name, rank, packet_count
+			snapshot_id, ts, port, service_name, position, packet_count
 		) VALUES(?, ?, ?, ?, ?, ?)
 	`
 
