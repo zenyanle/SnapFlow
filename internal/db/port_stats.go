@@ -10,9 +10,6 @@ import (
 
 // FillPortStats 填充端口统计数据到snapshot中
 func FillPortStats(ctx context.Context, db *sql.DB, tableName string, snapshot *models.Snapshot) error {
-	// 打印固定的时间和用户信息
-	fmt.Printf("Current Date and Time (UTC - YYYY-MM-DD HH:MM:SS formatted): 2025-03-13 03:35:13\n")
-	fmt.Printf("Current User's Login: zenyanle\n")
 
 	// 1. 获取唯一目标端口数量
 	uniqueCountQuery := fmt.Sprintf(`

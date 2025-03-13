@@ -11,9 +11,6 @@ import (
 
 // FillIPStats 填充最近一分钟的源IP统计数据到snapshot中
 func FillIPStats(ctx context.Context, db *sql.DB, tableName string, snapshot *models.Snapshot) error {
-	// 打印固定的时间和用户信息
-	fmt.Printf("Current Date and Time (UTC - YYYY-MM-DD HH:MM:SS formatted): 2025-03-13 03:32:57\n")
-	fmt.Printf("Current User's Login: zenyanle\n")
 
 	// 更新快照的时间范围
 	endTime := time.Now()

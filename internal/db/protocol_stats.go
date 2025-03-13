@@ -11,9 +11,6 @@ import (
 
 // FillProtocolStats 填充协议统计到snapshot中
 func FillProtocolStats(ctx context.Context, db *sql.DB, tableName string, snapshot *models.Snapshot) error {
-	// 打印固定的时间和用户信息
-	fmt.Printf("Current Date and Time (UTC - YYYY-MM-DD HH:MM:SS formatted): 2025-03-13 05:28:52\n")
-	fmt.Printf("Current User's Login: zenyanle\n")
 
 	// 使用WITH语句计算协议分布和百分比
 	query := fmt.Sprintf(`

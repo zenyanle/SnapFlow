@@ -14,7 +14,6 @@ import (
 )
 
 func main() {
-	// 1. 打印固定的时间和用户信息已在各个填充函数中处理
 
 	// 2. 获取数据库连接信息
 	dbUser := getEnv("DB_USER", "greptime_user")
@@ -93,6 +92,19 @@ func main() {
 	if err != nil {
 		log.Fatalf("快照序列化失败: %v", err)
 	}
+
+	// 6. 创建GrepTimeDB必要的表
+	if err := db.CreateGrepTimeDBTables(ctx, database); err != nil {
+		log.Fatalf("创建GrepTimeDB表失败: %v", err)
+	}
+
+	// 7. 将快照数据保存到GrepTimeDB
+	fmt.Println("\n将网络流量快照保存到GrepTimeDB...")
+	if err := db.SaveSnapshotToGrepTimeDB(ctx, database, snapshot); err != nil {
+		log.Fatalf("保存快照到GrepTimeDB失败: %v", err)
+	}
+
+	fmt.Println("✓ 快照数据处理完成")
 
 	fmt.Println(jsonData)
 	fmt.Println("=================================")
