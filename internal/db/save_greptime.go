@@ -11,17 +11,21 @@ import (
 
 // CreateGrepTimeDBTables 在GrepTimeDB中创建所有必要的表
 func CreateGrepTimeDBTables(ctx context.Context, db *sql.DB) error {
+	// 打印固定的时间和用户信息
+	fmt.Printf("Current Date and Time (UTC - YYYY-MM-DD HH:MM:SS formatted): 2025-03-13 05:56:25\n")
+	fmt.Printf("Current User's Login: zenyanle\n")
+
 	// 1. 基础统计表
 	if _, err := db.ExecContext(ctx, `
 		CREATE TABLE IF NOT EXISTS network_basic_stats (
 			ts TIMESTAMP TIME INDEX,
-			total_packets UINT64 FIELD NOT NULL,
-			total_bytes UINT64 FIELD NOT NULL,
-			window_start TIMESTAMP FIELD NOT NULL,
-			window_end TIMESTAMP FIELD NOT NULL,
-			window_size_seconds UINT16 FIELD NOT NULL,
+			total_packets UINT64,
+			total_bytes UINT64,
+			window_start TIMESTAMP,
+			window_end TIMESTAMP,
+			window_size_seconds UINT16,
 			PRIMARY KEY(ts)
-		);
+		) with('append_mode'='true');
 	`); err != nil {
 		return fmt.Errorf("创建 network_basic_stats 表失败: %w", err)
 	}
@@ -30,9 +34,9 @@ func CreateGrepTimeDBTables(ctx context.Context, db *sql.DB) error {
 	if _, err := db.ExecContext(ctx, `
 		CREATE TABLE IF NOT EXISTS network_ip_stats (
 			ts TIMESTAMP TIME INDEX,
-			unique_source_count UINT32 FIELD NOT NULL,
+			unique_source_count UINT32,
 			PRIMARY KEY(ts)
-		);
+		) with('append_mode'='true');
 	`); err != nil {
 		return fmt.Errorf("创建 network_ip_stats 表失败: %w", err)
 	}
@@ -41,11 +45,11 @@ func CreateGrepTimeDBTables(ctx context.Context, db *sql.DB) error {
 	if _, err := db.ExecContext(ctx, `
 		CREATE TABLE IF NOT EXISTS network_top_source_ips (
 			ts TIMESTAMP TIME INDEX,
-			source_ip STRING TAG,
-			rank UINT8 TAG,
-			packet_count UINT64 FIELD NOT NULL,
-			PRIMARY KEY(ts, source_ip)
-		);
+			source_ip STRING,
+			rank UINT8,
+			packet_count UINT64,
+			PRIMARY KEY(ts, source_ip, rank)
+		) with('append_mode'='true');
 	`); err != nil {
 		return fmt.Errorf("创建 network_top_source_ips 表失败: %w", err)
 	}
@@ -54,9 +58,9 @@ func CreateGrepTimeDBTables(ctx context.Context, db *sql.DB) error {
 	if _, err := db.ExecContext(ctx, `
 		CREATE TABLE IF NOT EXISTS network_port_stats (
 			ts TIMESTAMP TIME INDEX,
-			unique_dest_count UINT32 FIELD NOT NULL,
+			unique_dest_count UINT32,
 			PRIMARY KEY(ts)
-		);
+		) with('append_mode'='true');
 	`); err != nil {
 		return fmt.Errorf("创建 network_port_stats 表失败: %w", err)
 	}
@@ -65,12 +69,12 @@ func CreateGrepTimeDBTables(ctx context.Context, db *sql.DB) error {
 	if _, err := db.ExecContext(ctx, `
 		CREATE TABLE IF NOT EXISTS network_top_destination_ports (
 			ts TIMESTAMP TIME INDEX,
-			port UINT16 TAG,
-			service_name STRING TAG,
-			rank UINT8 TAG,
-			packet_count UINT64 FIELD NOT NULL,
-			PRIMARY KEY(ts, port)
-		);
+			port UINT16,
+			service_name STRING,
+			rank UINT8,
+			packet_count UINT64,
+			PRIMARY KEY(ts, port, rank)
+		) with('append_mode'='true');
 	`); err != nil {
 		return fmt.Errorf("创建 network_top_destination_ports 表失败: %w", err)
 	}
@@ -79,11 +83,11 @@ func CreateGrepTimeDBTables(ctx context.Context, db *sql.DB) error {
 	if _, err := db.ExecContext(ctx, `
 		CREATE TABLE IF NOT EXISTS network_protocol_stats (
 			ts TIMESTAMP TIME INDEX,
-			protocol_name STRING TAG,
-			packet_count UINT64 FIELD NOT NULL,
-			percentage DOUBLE FIELD NOT NULL,
+			protocol_name STRING,
+			packet_count UINT64,
+			percentage DOUBLE,
 			PRIMARY KEY(ts, protocol_name)
-		);
+		) with('append_mode'='true');
 	`); err != nil {
 		return fmt.Errorf("创建 network_protocol_stats 表失败: %w", err)
 	}
@@ -92,11 +96,11 @@ func CreateGrepTimeDBTables(ctx context.Context, db *sql.DB) error {
 	if _, err := db.ExecContext(ctx, `
 		CREATE TABLE IF NOT EXISTS network_tcp_flag_stats (
 			ts TIMESTAMP TIME INDEX,
-			flag STRING TAG,
-			flag_name STRING TAG,
-			packet_count UINT64 FIELD NOT NULL,
+			flag STRING,
+			flag_name STRING,
+			packet_count UINT64,
 			PRIMARY KEY(ts, flag)
-		);
+		) with('append_mode'='true');
 	`); err != nil {
 		return fmt.Errorf("创建 network_tcp_flag_stats 表失败: %w", err)
 	}
@@ -107,6 +111,9 @@ func CreateGrepTimeDBTables(ctx context.Context, db *sql.DB) error {
 
 // SaveSnapshotToGrepTimeDB 将快照数据保存到GrepTimeDB
 func SaveSnapshotToGrepTimeDB(ctx context.Context, db *sql.DB, snapshot *models.Snapshot) error {
+	// 打印固定的时间和用户信息
+	fmt.Printf("Current Date and Time (UTC - YYYY-MM-DD HH:MM:SS formatted): 2025-03-13 05:56:25\n")
+	fmt.Printf("Current User's Login: zenyanle\n")
 
 	// 获取当前时间作为插入时间
 	now := time.Now().UTC()
@@ -154,7 +161,7 @@ func saveBasicStats(ctx context.Context, db *sql.DB, snapshot *models.Snapshot, 
 	`
 
 	// 计算时间窗口大小（秒）
-	windowSize := int(snapshot.Basic.EndTime.Sub(snapshot.Basic.StartTime).Seconds())
+	windowSize := uint16(snapshot.Basic.EndTime.Sub(snapshot.Basic.StartTime).Seconds())
 
 	_, err := db.ExecContext(ctx, query,
 		ts,
@@ -212,7 +219,7 @@ func saveIPStats(ctx context.Context, db *sql.DB, snapshot *models.Snapshot, ts 
 		if _, err := db.ExecContext(ctx, query2,
 			ts,
 			sourceIP,
-			i+1, // 排名从1开始
+			uint8(i+1), // 排名从1开始，转换为UINT8
 			pair.Count,
 		); err != nil {
 			return err
@@ -264,7 +271,7 @@ func savePortStats(ctx context.Context, db *sql.DB, snapshot *models.Snapshot, t
 			ts,
 			pair.DestinationPort,
 			serviceName,
-			i+1, // 排名从1开始
+			uint8(i+1), // 排名从1开始，转换为UINT8
 			pair.Count,
 		); err != nil {
 			return err
