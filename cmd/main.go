@@ -5,11 +5,9 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	_ "github.com/go-sql-driver/mysql"
 	"log"
 	"os"
-	"time"
-
-	_ "github.com/go-sql-driver/mysql"
 
 	"SnapFlow/internal/db"
 	"SnapFlow/internal/models"
@@ -87,11 +85,6 @@ func main() {
 		fmt.Println("✓ TCP标志统计数据收集完成")
 	}
 
-	// 9. 设置快照的时间戳和用户信息
-	parsedTime, _ := time.Parse("2006-01-02 15:04:05", fixedDateTimeUTC)
-	snapshot.Timestamp = parsedTime
-	snapshot.User = fixedUserLogin
-
 	// 10. 将快照序列化为JSON并打印
 	fmt.Println("\n网络流量快照数据 (JSON格式):")
 	fmt.Println("=================================")
@@ -144,7 +137,6 @@ func snapshotToJSON(snapshot *models.Snapshot) (string, error) {
 	// 创建JSON结构
 	jsonData := jsonSnapshot{
 		Timestamp: snapshot.Timestamp.Format("2006-01-02 15:04:05"),
-		User:      snapshot.User,
 	}
 
 	// 复制基本统计信息
