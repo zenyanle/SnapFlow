@@ -5,21 +5,14 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="db4cc146-584f-4458-af68-c0f2079c99d0" name="Changes" comment="">
-      <change afterPath="$PROJECT_DIR$/.idea/.gitignore" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/SnapFlow.iml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/material_theme_project_new.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/modules.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/vcs.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/cmd/main.go" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/go.mod" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/go.sum" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/internal/db/ip_dao.go" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/internal/db/mysql_connect.go" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/internal/db/packet_dao.go" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/internal/db/queries.go" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/internal/models/packet.go" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/internal/models/snapshot.go" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/internal/snapshot/extractor/extractor.go" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/cmd/main.go" beforeDir="false" afterPath="$PROJECT_DIR$/cmd/main.go" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/internal/db/basic_stats.go" beforeDir="false" afterPath="$PROJECT_DIR$/internal/db/basic_stats.go" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/internal/db/ip_dao.go" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/internal/db/mysql_connect.go" beforeDir="false" afterPath="$PROJECT_DIR$/internal/db/mysql_connect.go" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/internal/db/packet_dao.go" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/internal/db/port_stats.go" beforeDir="false" afterPath="$PROJECT_DIR$/internal/db/port_stats.go" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/internal/models/snapshot.go" beforeDir="false" afterPath="$PROJECT_DIR$/internal/models/snapshot.go" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -37,9 +30,9 @@
   <component name="Git.Settings">
     <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
   </component>
-  <component name="ProjectColorInfo"><![CDATA[{
-  "associatedIndex": 1
-}]]></component>
+  <component name="ProjectColorInfo">{
+  &quot;associatedIndex&quot;: 1
+}</component>
   <component name="ProjectId" id="2uCwxngI6uXiBhgNKsPpwiIo6vg" />
   <component name="ProjectViewState">
     <option name="hideEmptyMiddlePackages" value="true" />
@@ -53,7 +46,7 @@
     "RunOnceActivity.go.formatter.settings.were.checked": "true",
     "RunOnceActivity.go.migrated.go.modules.settings": "true",
     "RunOnceActivity.go.modules.go.list.on.any.changes.was.set": "true",
-    "git-widget-placeholder": "master",
+    "git-widget-placeholder": "main",
     "go.import.settings.migrated": "true",
     "go.sdk.automatically.set": "true",
     "last_opened_file_path": "/home/hugo/SnapFlow",

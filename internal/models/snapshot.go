@@ -46,9 +46,8 @@ type IPStats struct {
 
 // IPAddressPair IP地址对及其出现次数
 type IPAddressPair struct {
-	SourceIP      string // 源IP地址
-	DestinationIP string // 目标IP地址
-	Count         uint64 // 出现次数
+	SourceIP string // 源IP地址
+	Count    uint64 // 出现次数
 }
 
 // PortStats 端口统计
@@ -59,7 +58,6 @@ type PortStats struct {
 
 // PortPair 端口对及其出现次数
 type PortPair struct {
-	SourcePort      uint16 // 源端口
 	DestinationPort uint16 // 目标端口
 	Count           uint64 // 出现次数
 }
@@ -149,9 +147,8 @@ func (s *Snapshot) SetIPStats(uniqueCount int, topPairs []IPAddressPair) {
 		} else {
 			// 使用空值占位符
 			s.IP.TopPairs[i] = IPAddressPair{
-				SourceIP:      "",
-				DestinationIP: "",
-				Count:         0,
+				SourceIP: "",
+				Count:    0,
 			}
 		}
 	}
@@ -170,7 +167,6 @@ func (s *Snapshot) SetPortStats(uniqueCount int, topPairs []PortPair) {
 		} else {
 			// 使用空值占位符
 			s.Port.TopPairs[i] = PortPair{
-				SourcePort:      0,
 				DestinationPort: 0,
 				Count:           0,
 			}

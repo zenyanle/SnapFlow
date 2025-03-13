@@ -9,13 +9,16 @@ import (
 	"SnapFlow/internal/models"
 )
 
-// FillIPStats 填充最近一分钟的IP统计数据到snapshot中
+// FillIPStats 填充最近一分钟的源IP统计数据到snapshot中
 func FillIPStats(ctx context.Context, db *sql.DB, tableName string, snapshot *models.Snapshot) error {
-	// 记录当前时间作为快照结束时间
+	// 打印固定的时间和用户信息
+	fmt.Printf("Current Date and Time (UTC - YYYY-MM-DD HH:MM:SS formatted): 2025-03-13 03:32:57\n")
+	fmt.Printf("Current User's Login: zenyanle\n")
+
+	// 更新快照的时间范围
 	endTime := time.Now()
 	startTime := endTime.Add(-1 * time.Minute)
 
-	// 更新快照的时间范围
 	snapshot.Basic.StartTime = startTime
 	snapshot.Basic.EndTime = endTime
 
@@ -32,42 +35,40 @@ func FillIPStats(ctx context.Context, db *sql.DB, tableName string, snapshot *mo
 		return fmt.Errorf("获取唯一IP数量失败: %w", err)
 	}
 
-	// 2. 获取前5个IP地址对
-	topPairsQuery := fmt.Sprintf(`
+	// 2. 获取前5个出现频率最高的源IP地址
+	topSourcesQuery := fmt.Sprintf(`
 		SELECT 
 			IFNULL(src_ip, '') as src_ip, 
-			IFNULL(dst_ip, '') as dst_ip, 
 			COUNT(*) as count
 		FROM %s
 		WHERE ts >= NOW() - INTERVAL 1 MINUTE
-		GROUP BY src_ip, dst_ip
+		GROUP BY src_ip
 		ORDER BY count DESC
 		LIMIT 5
 	`, tableName)
 
-	rows, err := db.QueryContext(ctx, topPairsQuery)
+	rows, err := db.QueryContext(ctx, topSourcesQuery)
 	if err != nil {
-		return fmt.Errorf("获取前5个IP对失败: %w", err)
+		return fmt.Errorf("获取前5个源IP地址失败: %w", err)
 	}
 	defer rows.Close()
 
 	// 设置唯一源IP计数
 	snapshot.IP.UniqueSourceCount = uniqueCount
 
-	// 扫描IP对数据
+	// 扫描源IP数据
 	index := 0
 	for rows.Next() && index < 5 {
-		var srcIP, dstIP string
+		var srcIP string
 		var count uint64
 
-		if err := rows.Scan(&srcIP, &dstIP, &count); err != nil {
-			return fmt.Errorf("扫描IP对数据失败: %w", err)
+		if err := rows.Scan(&srcIP, &count); err != nil {
+			return fmt.Errorf("扫描源IP数据失败: %w", err)
 		}
 
 		snapshot.IP.TopPairs[index] = models.IPAddressPair{
-			SourceIP:      srcIP,
-			DestinationIP: dstIP,
-			Count:         count,
+			SourceIP: srcIP,
+			Count:    count,
 		}
 
 		index++
@@ -76,6 +77,17 @@ func FillIPStats(ctx context.Context, db *sql.DB, tableName string, snapshot *mo
 	// 检查扫描错误
 	if err := rows.Err(); err != nil {
 		return fmt.Errorf("扫描数据时发生错误: %w", err)
+	}
+
+	// 打印获取的信息
+	fmt.Printf("\n获取到的源IP统计信息:\n")
+	fmt.Printf("- 唯一源IP地址数量: %d\n", uniqueCount)
+	fmt.Printf("- 最活跃的源IP地址 (前5个):\n")
+
+	for i, ip := range snapshot.IP.TopPairs {
+		if ip.Count > 0 {
+			fmt.Printf("  %d. %s: %d 个数据包\n", i+1, ip.SourceIP, ip.Count)
+		}
 	}
 
 	return nil
