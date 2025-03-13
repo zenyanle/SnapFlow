@@ -5,9 +5,13 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	_ "github.com/go-sql-driver/mysql"
 	"log"
 	"os"
+	"os/signal"
+	"syscall"
+	"time"
+
+	_ "github.com/go-sql-driver/mysql"
 
 	"SnapFlow/internal/db"
 	"SnapFlow/internal/models"
@@ -15,99 +19,158 @@ import (
 
 func main() {
 
-	// 2. 获取数据库连接信息
-	dbUser := getEnv("DB_USER", "greptime_user")
-	dbPass := getEnv("DB_PASSWORD", "greptime_pwd")
-	dbHost := getEnv("DB_HOST", "localhost")
-	dbPort := getEnv("DB_PORT", "4002")
-	dbName := getEnv("DB_NAME", "test")
+	// 设置上下文
+	ctx := context.Background()
 
-	// 3. 构建数据库连接字符串
-	dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?parseTime=true", dbUser, dbPass, dbHost, dbPort, dbName)
-
-	// 4. 连接数据库
-	database, err := sql.Open("mysql", dsn)
+	// 连接到数据库（GrepTimeDB和MySQL共享同一个连接）
+	database, err := connectToDatabase()
 	if err != nil {
-		log.Fatalf("数据库连接失败: %v", err)
+		log.Fatalf("连接到数据库失败: %v", err)
 	}
 	defer database.Close()
 
-	// 5. 检查数据库连接
-	if err := database.Ping(); err != nil {
-		log.Fatalf("无法连接到数据库: %v", err)
+	// 创建所需的表
+	if err := db.CreateGrepTimeDBTables(ctx, database); err != nil {
+		log.Fatalf("创建GrepTimeDB表失败: %v", err)
 	}
-	fmt.Println("已成功连接到数据库")
+	fmt.Println("✓ GrepTimeDB表创建完成")
 
-	// 6. 设置上下文和表名
-	ctx := context.Background()
+	// 设置定时器，每5秒执行一次
+	ticker := time.NewTicker(5 * time.Second)
+	defer ticker.Stop()
+
+	// 设置信号处理以便于优雅退出
+	done := make(chan bool)
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+
+	fmt.Println("\n开始自动快照采集，每5秒一次。按Ctrl+C退出...\n")
+
+	// 启动时立即执行一次
+	go collectAndSaveSnapshot(ctx, database)
+
+	// 主循环
+	go func() {
+		snapshotCount := 1
+		for {
+			select {
+			case <-ticker.C:
+				fmt.Printf("\n--- 开始采集第 %d 个快照 ---\n", snapshotCount)
+				collectAndSaveSnapshot(ctx, database)
+				snapshotCount++
+			case <-done:
+				return
+			}
+		}
+	}()
+
+	// 等待退出信号
+	<-sigChan
+	fmt.Println("\n接收到退出信号，正在关闭...")
+	done <- true
+	fmt.Println("程序已退出")
+}
+
+// collectAndSaveSnapshot 收集网络流量快照并保存到GrepTimeDB
+func collectAndSaveSnapshot(ctx context.Context, database *sql.DB) {
+
+	// 设置表名
 	packetTableName := "packet_data"
 	statsTableName := "packets_statistics2"
 
-	// 7. 创建新快照
+	// 创建新快照
 	snapshot := models.NewSnapshot()
 
-	// 8. 填充各种统计数据
 	fmt.Println("开始收集网络流量统计数据...")
 
-	// 首先填充基本统计信息
+	// 1. 填充基本统计信息
 	if err := db.FillBasicStats(ctx, database, statsTableName, snapshot); err != nil {
 		log.Printf("填充基本统计信息失败: %v", err)
 	} else {
 		fmt.Println("✓ 基本统计数据收集完成")
 	}
 
-	// 填充IP统计
+	// 2. 填充IP统计
 	if err := db.FillIPStats(ctx, database, packetTableName, snapshot); err != nil {
 		log.Printf("填充IP统计失败: %v", err)
 	} else {
 		fmt.Println("✓ IP统计数据收集完成")
 	}
 
-	// 填充端口统计
+	// 3. 填充端口统计
 	if err := db.FillPortStats(ctx, database, packetTableName, snapshot); err != nil {
 		log.Printf("填充端口统计失败: %v", err)
 	} else {
 		fmt.Println("✓ 端口统计数据收集完成")
 	}
 
-	// 填充协议统计
+	// 4. 填充协议统计
 	if err := db.FillProtocolStats(ctx, database, packetTableName, snapshot); err != nil {
 		log.Printf("填充协议统计失败: %v", err)
 	} else {
 		fmt.Println("✓ 协议统计数据收集完成")
 	}
 
-	// 填充TCP标志统计
+	// 5. 填充TCP标志统计
 	if err := db.FillTCPFlagsStats(ctx, database, packetTableName, snapshot); err != nil {
 		log.Printf("填充TCP标志统计失败: %v", err)
 	} else {
 		fmt.Println("✓ TCP标志统计数据收集完成")
 	}
 
-	// 10. 将快照序列化为JSON并打印
-	fmt.Println("\n网络流量快照数据 (JSON格式):")
-	fmt.Println("=================================")
-
-	jsonData, err := snapshotToJSON(snapshot)
-	if err != nil {
-		log.Fatalf("快照序列化失败: %v", err)
-	}
-
-	// 6. 创建GrepTimeDB必要的表
-	if err := db.CreateGrepTimeDBTables(ctx, database); err != nil {
-		log.Fatalf("创建GrepTimeDB表失败: %v", err)
-	}
-
-	// 7. 将快照数据保存到GrepTimeDB
-	fmt.Println("\n将网络流量快照保存到GrepTimeDB...")
+	// 6. 将快照数据保存到GrepTimeDB
+	fmt.Println("将网络流量快照保存到GrepTimeDB...")
 	if err := db.SaveSnapshotToGrepTimeDB(ctx, database, snapshot); err != nil {
-		log.Fatalf("保存快照到GrepTimeDB失败: %v", err)
+		log.Printf("保存快照到GrepTimeDB失败: %v", err)
+		return
 	}
 
-	fmt.Println("✓ 快照数据处理完成")
+	// 7. 显示统计摘要
+	fmt.Printf("✓ 快照采集完成 - 总计 %d 个数据包，%d 字节\n",
+		snapshot.Basic.TotalPackets,
+		snapshot.Basic.TotalBytes)
 
-	fmt.Println(jsonData)
-	fmt.Println("=================================")
+	// 8. 可选：输出JSON格式的摘要
+	if os.Getenv("VERBOSE_OUTPUT") == "true" {
+		jsonStr, _ := snapshotToJSON(snapshot)
+		fmt.Printf("快照摘要:\n%s\n", jsonStr)
+	}
+}
+
+// connectToDatabase 连接到共享的数据库
+func connectToDatabase() (*sql.DB, error) {
+	// 获取数据库连接信息
+	dbUser := getEnv("DB_USER", "greptime_user")
+	dbPass := getEnv("DB_PASSWORD", "greptime_pwd")
+	dbHost := getEnv("DB_HOST", "localhost")
+	dbPort := getEnv("DB_PORT", "4002")
+	dbName := getEnv("DB_NAME", "test")
+
+	// 构建连接字符串
+	dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?parseTime=true",
+		dbUser, dbPass, dbHost, dbPort, dbName)
+
+	fmt.Println("正在连接到数据库...")
+
+	// 连接数据库
+	database, err := sql.Open("mysql", dsn)
+	if err != nil {
+		return nil, fmt.Errorf("数据库连接失败: %w", err)
+	}
+
+	// 设置连接池
+	database.SetMaxOpenConns(10)
+	database.SetMaxIdleConns(5)
+	database.SetConnMaxLifetime(5 * time.Minute)
+
+	// 检查数据库连接
+	if err := database.Ping(); err != nil {
+		database.Close()
+		return nil, fmt.Errorf("无法连接到数据库: %w", err)
+	}
+
+	fmt.Println("✓ 成功连接到数据库")
+	return database, nil
 }
 
 // getEnv 获取环境变量，如果不存在则返回默认值
