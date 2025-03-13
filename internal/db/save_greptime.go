@@ -11,20 +11,18 @@ import (
 
 // CreateGrepTimeDBTables 在GrepTimeDB中创建所有必要的表
 func CreateGrepTimeDBTables(ctx context.Context, db *sql.DB) error {
-	// 打印固定的时间和用户信息
-	fmt.Printf("Current Date and Time (UTC - YYYY-MM-DD HH:MM:SS formatted): 2025-03-13 05:56:25\n")
-	fmt.Printf("Current User's Login: zenyanle\n")
 
-	// 1. 基础统计表
+	// 1. 基础统计表 - 添加id作为主键
 	if _, err := db.ExecContext(ctx, `
 		CREATE TABLE IF NOT EXISTS network_basic_stats (
+			id STRING,
 			ts TIMESTAMP TIME INDEX,
 			total_packets UINT64,
 			total_bytes UINT64,
 			window_start TIMESTAMP,
 			window_end TIMESTAMP,
 			window_size_seconds UINT16,
-			PRIMARY KEY(ts)
+			PRIMARY KEY(id)
 		) with('append_mode'='true');
 	`); err != nil {
 		return fmt.Errorf("创建 network_basic_stats 表失败: %w", err)
@@ -33,9 +31,10 @@ func CreateGrepTimeDBTables(ctx context.Context, db *sql.DB) error {
 	// 2. IP 统计表
 	if _, err := db.ExecContext(ctx, `
 		CREATE TABLE IF NOT EXISTS network_ip_stats (
+			id STRING,
 			ts TIMESTAMP TIME INDEX,
 			unique_source_count UINT32,
-			PRIMARY KEY(ts)
+			PRIMARY KEY(id)
 		) with('append_mode'='true');
 	`); err != nil {
 		return fmt.Errorf("创建 network_ip_stats 表失败: %w", err)
@@ -44,11 +43,12 @@ func CreateGrepTimeDBTables(ctx context.Context, db *sql.DB) error {
 	// 3. 热门源 IP 表
 	if _, err := db.ExecContext(ctx, `
 		CREATE TABLE IF NOT EXISTS network_top_source_ips (
+			id STRING,
 			ts TIMESTAMP TIME INDEX,
 			source_ip STRING,
 			rank UINT8,
 			packet_count UINT64,
-			PRIMARY KEY(ts, source_ip, rank)
+			PRIMARY KEY(id, source_ip)
 		) with('append_mode'='true');
 	`); err != nil {
 		return fmt.Errorf("创建 network_top_source_ips 表失败: %w", err)
@@ -57,9 +57,10 @@ func CreateGrepTimeDBTables(ctx context.Context, db *sql.DB) error {
 	// 4. 端口统计表
 	if _, err := db.ExecContext(ctx, `
 		CREATE TABLE IF NOT EXISTS network_port_stats (
+			id STRING,
 			ts TIMESTAMP TIME INDEX,
 			unique_dest_count UINT32,
-			PRIMARY KEY(ts)
+			PRIMARY KEY(id)
 		) with('append_mode'='true');
 	`); err != nil {
 		return fmt.Errorf("创建 network_port_stats 表失败: %w", err)
@@ -68,12 +69,13 @@ func CreateGrepTimeDBTables(ctx context.Context, db *sql.DB) error {
 	// 5. 热门目标端口表
 	if _, err := db.ExecContext(ctx, `
 		CREATE TABLE IF NOT EXISTS network_top_destination_ports (
+			id STRING,
 			ts TIMESTAMP TIME INDEX,
 			port UINT16,
 			service_name STRING,
 			rank UINT8,
 			packet_count UINT64,
-			PRIMARY KEY(ts, port, rank)
+			PRIMARY KEY(id, port)
 		) with('append_mode'='true');
 	`); err != nil {
 		return fmt.Errorf("创建 network_top_destination_ports 表失败: %w", err)
@@ -82,11 +84,12 @@ func CreateGrepTimeDBTables(ctx context.Context, db *sql.DB) error {
 	// 6. 协议统计表
 	if _, err := db.ExecContext(ctx, `
 		CREATE TABLE IF NOT EXISTS network_protocol_stats (
+			id STRING,
 			ts TIMESTAMP TIME INDEX,
 			protocol_name STRING,
 			packet_count UINT64,
 			percentage DOUBLE,
-			PRIMARY KEY(ts, protocol_name)
+			PRIMARY KEY(id, protocol_name)
 		) with('append_mode'='true');
 	`); err != nil {
 		return fmt.Errorf("创建 network_protocol_stats 表失败: %w", err)
@@ -95,11 +98,12 @@ func CreateGrepTimeDBTables(ctx context.Context, db *sql.DB) error {
 	// 7. TCP 标志统计表
 	if _, err := db.ExecContext(ctx, `
 		CREATE TABLE IF NOT EXISTS network_tcp_flag_stats (
+			id STRING,
 			ts TIMESTAMP TIME INDEX,
 			flag STRING,
 			flag_name STRING,
 			packet_count UINT64,
-			PRIMARY KEY(ts, flag)
+			PRIMARY KEY(id, flag)
 		) with('append_mode'='true');
 	`); err != nil {
 		return fmt.Errorf("创建 network_tcp_flag_stats 表失败: %w", err)
@@ -112,39 +116,42 @@ func CreateGrepTimeDBTables(ctx context.Context, db *sql.DB) error {
 // SaveSnapshotToGrepTimeDB 将快照数据保存到GrepTimeDB
 func SaveSnapshotToGrepTimeDB(ctx context.Context, db *sql.DB, snapshot *models.Snapshot) error {
 	// 打印固定的时间和用户信息
-	fmt.Printf("Current Date and Time (UTC - YYYY-MM-DD HH:MM:SS formatted): 2025-03-13 05:56:25\n")
+	fmt.Printf("Current Date and Time (UTC - YYYY-MM-DD HH:MM:SS formatted): 2025-03-13 06:05:51\n")
 	fmt.Printf("Current User's Login: zenyanle\n")
 
 	// 获取当前时间作为插入时间
 	now := time.Now().UTC()
 
+	// 生成唯一ID (使用时间戳+随机数)
+	id := fmt.Sprintf("snap_%d", now.UnixNano())
+
 	// 1. 插入基础统计数据
 	fmt.Println("插入基础统计数据...")
-	if err := saveBasicStats(ctx, db, snapshot, now); err != nil {
+	if err := saveBasicStats(ctx, db, snapshot, now, id); err != nil {
 		return fmt.Errorf("插入基础统计数据失败: %w", err)
 	}
 
 	// 2. 插入IP统计数据
 	fmt.Println("插入IP统计数据...")
-	if err := saveIPStats(ctx, db, snapshot, now); err != nil {
+	if err := saveIPStats(ctx, db, snapshot, now, id); err != nil {
 		return fmt.Errorf("插入IP统计数据失败: %w", err)
 	}
 
 	// 3. 插入端口统计数据
 	fmt.Println("插入端口统计数据...")
-	if err := savePortStats(ctx, db, snapshot, now); err != nil {
+	if err := savePortStats(ctx, db, snapshot, now, id); err != nil {
 		return fmt.Errorf("插入端口统计数据失败: %w", err)
 	}
 
 	// 4. 插入协议统计数据
 	fmt.Println("插入协议统计数据...")
-	if err := saveProtocolStats(ctx, db, snapshot, now); err != nil {
+	if err := saveProtocolStats(ctx, db, snapshot, now, id); err != nil {
 		return fmt.Errorf("插入协议统计数据失败: %w", err)
 	}
 
 	// 5. 插入TCP标志统计数据
 	fmt.Println("插入TCP标志统计数据...")
-	if err := saveTCPFlagsStats(ctx, db, snapshot, now); err != nil {
+	if err := saveTCPFlagsStats(ctx, db, snapshot, now, id); err != nil {
 		return fmt.Errorf("插入TCP标志统计数据失败: %w", err)
 	}
 
@@ -153,17 +160,18 @@ func SaveSnapshotToGrepTimeDB(ctx context.Context, db *sql.DB, snapshot *models.
 }
 
 // saveBasicStats 插入基础统计数据
-func saveBasicStats(ctx context.Context, db *sql.DB, snapshot *models.Snapshot, ts time.Time) error {
+func saveBasicStats(ctx context.Context, db *sql.DB, snapshot *models.Snapshot, ts time.Time, id string) error {
 	query := `
 		INSERT INTO network_basic_stats(
-			ts, total_packets, total_bytes, window_start, window_end, window_size_seconds
-		) VALUES(?, ?, ?, ?, ?, ?)
+			id, ts, total_packets, total_bytes, window_start, window_end, window_size_seconds
+		) VALUES(?, ?, ?, ?, ?, ?, ?)
 	`
 
 	// 计算时间窗口大小（秒）
 	windowSize := uint16(snapshot.Basic.EndTime.Sub(snapshot.Basic.StartTime).Seconds())
 
 	_, err := db.ExecContext(ctx, query,
+		id,
 		ts,
 		snapshot.Basic.TotalPackets,
 		snapshot.Basic.TotalBytes,
@@ -182,15 +190,16 @@ func saveBasicStats(ctx context.Context, db *sql.DB, snapshot *models.Snapshot, 
 }
 
 // saveIPStats 插入IP统计数据
-func saveIPStats(ctx context.Context, db *sql.DB, snapshot *models.Snapshot, ts time.Time) error {
+func saveIPStats(ctx context.Context, db *sql.DB, snapshot *models.Snapshot, ts time.Time, id string) error {
 	// 1. 插入IP统计摘要
 	query1 := `
 		INSERT INTO network_ip_stats(
-			ts, unique_source_count
-		) VALUES(?, ?)
+			id, ts, unique_source_count
+		) VALUES(?, ?, ?)
 	`
 
 	if _, err := db.ExecContext(ctx, query1,
+		id,
 		ts,
 		snapshot.IP.UniqueSourceCount,
 	); err != nil {
@@ -200,8 +209,8 @@ func saveIPStats(ctx context.Context, db *sql.DB, snapshot *models.Snapshot, ts 
 	// 2. 插入热门源IP
 	query2 := `
 		INSERT INTO network_top_source_ips(
-			ts, source_ip, rank, packet_count
-		) VALUES(?, ?, ?, ?)
+			id, ts, source_ip, rank, packet_count
+		) VALUES(?, ?, ?, ?, ?)
 	`
 
 	insertCount := 0
@@ -217,6 +226,7 @@ func saveIPStats(ctx context.Context, db *sql.DB, snapshot *models.Snapshot, ts 
 		}
 
 		if _, err := db.ExecContext(ctx, query2,
+			id,
 			ts,
 			sourceIP,
 			uint8(i+1), // 排名从1开始，转换为UINT8
@@ -236,15 +246,16 @@ func saveIPStats(ctx context.Context, db *sql.DB, snapshot *models.Snapshot, ts 
 }
 
 // savePortStats 插入端口统计数据
-func savePortStats(ctx context.Context, db *sql.DB, snapshot *models.Snapshot, ts time.Time) error {
+func savePortStats(ctx context.Context, db *sql.DB, snapshot *models.Snapshot, ts time.Time, id string) error {
 	// 1. 插入端口统计摘要
 	query1 := `
 		INSERT INTO network_port_stats(
-			ts, unique_dest_count
-		) VALUES(?, ?)
+			id, ts, unique_dest_count
+		) VALUES(?, ?, ?)
 	`
 
 	if _, err := db.ExecContext(ctx, query1,
+		id,
 		ts,
 		snapshot.Port.UniqueDestCount,
 	); err != nil {
@@ -254,8 +265,8 @@ func savePortStats(ctx context.Context, db *sql.DB, snapshot *models.Snapshot, t
 	// 2. 插入热门目标端口
 	query2 := `
 		INSERT INTO network_top_destination_ports(
-			ts, port, service_name, rank, packet_count
-		) VALUES(?, ?, ?, ?, ?)
+			id, ts, port, service_name, rank, packet_count
+		) VALUES(?, ?, ?, ?, ?, ?)
 	`
 
 	insertCount := 0
@@ -268,6 +279,7 @@ func savePortStats(ctx context.Context, db *sql.DB, snapshot *models.Snapshot, t
 		serviceName := getServiceNameByPort(pair.DestinationPort)
 
 		if _, err := db.ExecContext(ctx, query2,
+			id,
 			ts,
 			pair.DestinationPort,
 			serviceName,
@@ -288,16 +300,17 @@ func savePortStats(ctx context.Context, db *sql.DB, snapshot *models.Snapshot, t
 }
 
 // saveProtocolStats 插入协议统计数据
-func saveProtocolStats(ctx context.Context, db *sql.DB, snapshot *models.Snapshot, ts time.Time) error {
+func saveProtocolStats(ctx context.Context, db *sql.DB, snapshot *models.Snapshot, ts time.Time, id string) error {
 	query := `
 		INSERT INTO network_protocol_stats(
-			ts, protocol_name, packet_count, percentage
-		) VALUES(?, ?, ?, ?)
+			id, ts, protocol_name, packet_count, percentage
+		) VALUES(?, ?, ?, ?, ?)
 	`
 
 	insertCount := 0
 	for _, proto := range snapshot.Protocol.Protocols {
 		if _, err := db.ExecContext(ctx, query,
+			id,
 			ts,
 			proto.Name,
 			proto.Count,
@@ -315,11 +328,11 @@ func saveProtocolStats(ctx context.Context, db *sql.DB, snapshot *models.Snapsho
 }
 
 // saveTCPFlagsStats 插入TCP标志统计数据
-func saveTCPFlagsStats(ctx context.Context, db *sql.DB, snapshot *models.Snapshot, ts time.Time) error {
+func saveTCPFlagsStats(ctx context.Context, db *sql.DB, snapshot *models.Snapshot, ts time.Time, id string) error {
 	query := `
 		INSERT INTO network_tcp_flag_stats(
-			ts, flag, flag_name, packet_count
-		) VALUES(?, ?, ?, ?)
+			id, ts, flag, flag_name, packet_count
+		) VALUES(?, ?, ?, ?, ?)
 	`
 
 	insertCount := 0
@@ -328,6 +341,7 @@ func saveTCPFlagsStats(ctx context.Context, db *sql.DB, snapshot *models.Snapsho
 		flagName := getTCPFlagName(flag.Flag)
 
 		if _, err := db.ExecContext(ctx, query,
+			id,
 			ts,
 			flag.Flag,
 			flagName,
@@ -346,6 +360,8 @@ func saveTCPFlagsStats(ctx context.Context, db *sql.DB, snapshot *models.Snapsho
 
 // getServiceNameByPort 根据端口号获取服务名称
 func getServiceNameByPort(port uint16) string {
+	// 端口映射代码不变
+	// ...与之前相同...
 	portServiceMap := map[uint16]string{
 		20:    "FTP-data",
 		21:    "FTP",
@@ -394,6 +410,8 @@ func getServiceNameByPort(port uint16) string {
 
 // getTCPFlagName 根据TCP标志值获取可读名称
 func getTCPFlagName(flag string) string {
+	// TCP标志映射代码不变
+	// ...与之前相同...
 	flagNames := map[string]string{
 		"0":  "None",
 		"1":  "FIN",
