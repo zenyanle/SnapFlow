@@ -3,6 +3,7 @@ package db
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -11,9 +12,6 @@ import (
 
 // CreateGrepTimeDBTables 在GrepTimeDB中创建所有必要的表
 func CreateGrepTimeDBTables(ctx context.Context, db *sql.DB) error {
-	// 打印固定的时间和用户信息
-	fmt.Printf("Current Date and Time (UTC - YYYY-MM-DD HH:MM:SS formatted): 2025-03-13 06:23:13\n")
-	fmt.Printf("Current User's Login: zenyanle\n")
 
 	// 1. 基础统计表 - 使用snapshot_id作为主键
 	if _, err := db.ExecContext(ctx, `
@@ -112,15 +110,38 @@ func CreateGrepTimeDBTables(ctx context.Context, db *sql.DB) error {
 		return fmt.Errorf("创建 network_tcp_flag_stats 表失败: %w", err)
 	}
 
+	// 8. 新增: TCP 标志 JSON 统计表（用于 Grafana 饼图）
+	if _, err := db.ExecContext(ctx, `
+		CREATE TABLE IF NOT EXISTS network_tcp_flags_json (
+			snapshot_id STRING,
+			ts TIMESTAMP TIME INDEX,
+			flags_json STRING,
+			total_packet_count UINT64,
+			PRIMARY KEY(snapshot_id)
+		) with('append_mode'='true');
+	`); err != nil {
+		return fmt.Errorf("创建 network_tcp_flags_json 表失败: %w", err)
+	}
+
+	// 9. 新增: 协议 JSON 统计表（用于 Grafana 饼图）
+	if _, err := db.ExecContext(ctx, `
+		CREATE TABLE IF NOT EXISTS network_protocols_json (
+			snapshot_id STRING,
+			ts TIMESTAMP TIME INDEX,
+			protocols_json STRING,
+			total_packet_count UINT64,
+			PRIMARY KEY(snapshot_id)
+		) with('append_mode'='true');
+	`); err != nil {
+		return fmt.Errorf("创建 network_protocols_json 表失败: %w", err)
+	}
+
 	fmt.Println("所有GrepTimeDB数据表创建成功")
 	return nil
 }
 
 // SaveSnapshotToGrepTimeDB 将快照数据保存到GrepTimeDB
 func SaveSnapshotToGrepTimeDB(ctx context.Context, db *sql.DB, snapshot *models.Snapshot) error {
-	// 打印固定的时间和用户信息
-	fmt.Printf("Current Date and Time (UTC - YYYY-MM-DD HH:MM:SS formatted): 2025-03-13 06:23:13\n")
-	fmt.Printf("Current User's Login: zenyanle\n")
 
 	// 获取当前时间作为插入时间
 	now := time.Now().UTC()
@@ -156,6 +177,18 @@ func SaveSnapshotToGrepTimeDB(ctx context.Context, db *sql.DB, snapshot *models.
 	fmt.Println("插入TCP标志统计数据...")
 	if err := saveTCPFlagsStats(ctx, db, snapshot, now, snapshotID); err != nil {
 		return fmt.Errorf("插入TCP标志统计数据失败: %w", err)
+	}
+
+	// 6. 新增: 插入协议JSON统计数据（用于Grafana饼图）
+	fmt.Println("插入协议JSON数据...")
+	if err := saveProtocolsJSON(ctx, db, snapshot, now, snapshotID); err != nil {
+		return fmt.Errorf("插入协议JSON统计数据失败: %w", err)
+	}
+
+	// 7. 新增: 插入TCP标志JSON统计数据（用于Grafana饼图）
+	fmt.Println("插入TCP标志JSON数据...")
+	if err := saveTCPFlagsJSON(ctx, db, snapshot, now, snapshotID); err != nil {
+		return fmt.Errorf("插入TCP标志JSON统计数据失败: %w", err)
 	}
 
 	fmt.Println("网络流量快照已成功保存到GrepTimeDB")
@@ -358,6 +391,135 @@ func saveTCPFlagsStats(ctx context.Context, db *sql.DB, snapshot *models.Snapsho
 
 	fmt.Printf("- 保存了 %d 个TCP标志统计记录\n", insertCount)
 
+	return nil
+}
+
+// 新增: saveProtocolsJSON 保存协议JSON统计数据
+func saveProtocolsJSON(ctx context.Context, db *sql.DB, snapshot *models.Snapshot, ts time.Time, snapshotID string) error {
+	// 1. 构建JSON数据
+	type ProtocolData struct {
+		Name       string  `json:"name"`
+		Count      uint64  `json:"count"`
+		Percentage float64 `json:"percentage"`
+	}
+
+	type ProtocolsJSON struct {
+		Protocols []ProtocolData `json:"protocols"`
+	}
+
+	// 2. 填充数据
+	protocolsJSON := ProtocolsJSON{
+		Protocols: make([]ProtocolData, 0, len(snapshot.Protocol.Protocols)),
+	}
+
+	// 计算总数据包数
+	var totalCount uint64 = 0
+	for _, proto := range snapshot.Protocol.Protocols {
+		totalCount += proto.Count
+	}
+
+	// 填充JSON数据
+	for _, proto := range snapshot.Protocol.Protocols {
+		protocolsJSON.Protocols = append(protocolsJSON.Protocols, ProtocolData{
+			Name:       proto.Name,
+			Count:      proto.Count,
+			Percentage: proto.Percentage,
+		})
+	}
+
+	// 3. 序列化为JSON字符串
+	jsonBytes, err := json.Marshal(protocolsJSON)
+	if err != nil {
+		return fmt.Errorf("序列化协议JSON数据失败: %w", err)
+	}
+
+	// 4. 保存到数据库
+	query := `
+		INSERT INTO network_protocols_json(
+			snapshot_id, ts, protocols_json, total_packet_count
+		) VALUES(?, ?, ?, ?)
+	`
+
+	_, err = db.ExecContext(ctx, query,
+		snapshotID,
+		ts,
+		string(jsonBytes),
+		totalCount,
+	)
+
+	if err != nil {
+		return fmt.Errorf("保存协议JSON数据失败: %w", err)
+	}
+
+	fmt.Println("- 保存了协议JSON数据用于饼图展示")
+	return nil
+}
+
+// 新增: saveTCPFlagsJSON 保存TCP标志JSON统计数据
+func saveTCPFlagsJSON(ctx context.Context, db *sql.DB, snapshot *models.Snapshot, ts time.Time, snapshotID string) error {
+	// 1. 构建JSON数据
+	type FlagData struct {
+		Name       string  `json:"name"`
+		Flag       string  `json:"flag"`
+		Count      uint64  `json:"count"`
+		Percentage float64 `json:"percentage"`
+	}
+
+	type TCPFlagsJSON struct {
+		Flags []FlagData `json:"flags"`
+	}
+
+	// 2. 填充数据
+	flagsJSON := TCPFlagsJSON{
+		Flags: make([]FlagData, 0, len(snapshot.TCPFlags.Flags)),
+	}
+
+	// 计算总数据包数
+	var totalCount uint64 = 0
+	for _, flag := range snapshot.TCPFlags.Flags {
+		totalCount += flag.Count
+	}
+
+	// 计算百分比并添加到JSON结构
+	for _, flag := range snapshot.TCPFlags.Flags {
+		var percentage float64 = 0
+		if totalCount > 0 {
+			percentage = float64(flag.Count) * 100 / float64(totalCount)
+		}
+
+		flagsJSON.Flags = append(flagsJSON.Flags, FlagData{
+			Name:       getTCPFlagName(flag.Flag),
+			Flag:       flag.Flag,
+			Count:      flag.Count,
+			Percentage: percentage,
+		})
+	}
+
+	// 3. 序列化为JSON字符串
+	jsonBytes, err := json.Marshal(flagsJSON)
+	if err != nil {
+		return fmt.Errorf("序列化TCP标志JSON数据失败: %w", err)
+	}
+
+	// 4. 保存到数据库
+	query := `
+		INSERT INTO network_tcp_flags_json(
+			snapshot_id, ts, flags_json, total_packet_count
+		) VALUES(?, ?, ?, ?)
+	`
+
+	_, err = db.ExecContext(ctx, query,
+		snapshotID,
+		ts,
+		string(jsonBytes),
+		totalCount,
+	)
+
+	if err != nil {
+		return fmt.Errorf("保存TCP标志JSON数据失败: %w", err)
+	}
+
+	fmt.Println("- 保存了TCP标志JSON数据用于饼图展示")
 	return nil
 }
 
