@@ -11,6 +11,9 @@ import (
 
 // CreateGrepTimeDBTables 在GrepTimeDB中创建所有必要的表
 func CreateGrepTimeDBTables(ctx context.Context, db *sql.DB) error {
+	// 打印固定的时间和用户信息
+	fmt.Printf("Current Date and Time (UTC - YYYY-MM-DD HH:MM:SS formatted): 2025-03-19 10:02:56\n")
+	fmt.Printf("Current User's Login: zenyanle\n")
 
 	// 1. 基础统计表 - 使用snapshot_id作为主键
 	if _, err := db.ExecContext(ctx, `
@@ -109,7 +112,7 @@ func CreateGrepTimeDBTables(ctx context.Context, db *sql.DB) error {
 		return fmt.Errorf("创建 network_tcp_flag_stats 表失败: %w", err)
 	}
 
-	// 8. 新增: TCP 标志 JSON 统计表（扁平化列结构）
+	// 8. TCP 标志扁平化统计表（饼图用）
 	if _, err := db.ExecContext(ctx, `
 		CREATE TABLE IF NOT EXISTS network_tcp_flags_json (
 			snapshot_id STRING,
@@ -127,7 +130,7 @@ func CreateGrepTimeDBTables(ctx context.Context, db *sql.DB) error {
 		return fmt.Errorf("创建 network_tcp_flags_json 表失败: %w", err)
 	}
 
-	// 9. 新增: 协议 JSON 统计表（扁平化列结构）
+	// 9. 协议扁平化统计表（饼图用）
 	if _, err := db.ExecContext(ctx, `
 		CREATE TABLE IF NOT EXISTS network_protocols_json (
 			snapshot_id STRING,
@@ -143,6 +146,30 @@ func CreateGrepTimeDBTables(ctx context.Context, db *sql.DB) error {
 		return fmt.Errorf("创建 network_protocols_json 表失败: %w", err)
 	}
 
+	// 10. 新增: 服务名称扁平化统计表（饼图用）
+	if _, err := db.ExecContext(ctx, `
+		CREATE TABLE IF NOT EXISTS network_services_json (
+			snapshot_id STRING,
+			ts TIMESTAMP TIME INDEX,
+			total_packet_count UINT64,
+			http_count UINT64,
+			https_count UINT64,
+			ssh_count UINT64,
+			dns_count UINT64,
+			smtp_count UINT64,
+			ftp_count UINT64,
+			mysql_count UINT64,
+			ntp_count UINT64,
+			telnet_count UINT64,
+			rdp_count UINT64,
+			unknown_count UINT64,
+			other_count UINT64,
+			PRIMARY KEY(snapshot_id)
+		) with('append_mode'='true');
+	`); err != nil {
+		return fmt.Errorf("创建 network_services_json 表失败: %w", err)
+	}
+
 	fmt.Println("所有GrepTimeDB数据表创建成功")
 	return nil
 }
@@ -150,8 +177,8 @@ func CreateGrepTimeDBTables(ctx context.Context, db *sql.DB) error {
 // SaveSnapshotToGrepTimeDB 将快照数据保存到GrepTimeDB
 func SaveSnapshotToGrepTimeDB(ctx context.Context, db *sql.DB, snapshot *models.Snapshot) error {
 	// 打印固定的时间和用户信息
-	fmt.Printf("Current Date and Time (UTC - YYYY-MM-DD HH:MM:SS formatted): 2025-03-19 09:10:58\n")
-	fmt.Printf("Current User's Login: zenyanleschema\n")
+	fmt.Printf("Current Date and Time (UTC - YYYY-MM-DD HH:MM:SS formatted): 2025-03-19 10:02:56\n")
+	fmt.Printf("Current User's Login: zenyanle\n")
 
 	// 获取当前时间作为插入时间
 	now := time.Now().UTC()
@@ -189,16 +216,22 @@ func SaveSnapshotToGrepTimeDB(ctx context.Context, db *sql.DB, snapshot *models.
 		return fmt.Errorf("插入TCP标志统计数据失败: %w", err)
 	}
 
-	// 6. 新增: 插入协议JSON统计数据（用于Grafana饼图）
+	// 6. 插入协议扁平化统计数据
 	fmt.Println("插入协议分布数据...")
 	if err := saveProtocolsJSON(ctx, db, snapshot, now, snapshotID); err != nil {
 		return fmt.Errorf("插入协议分布统计数据失败: %w", err)
 	}
 
-	// 7. 新增: 插入TCP标志JSON统计数据（用于Grafana饼图）
+	// 7. 插入TCP标志扁平化统计数据
 	fmt.Println("插入TCP标志分布数据...")
 	if err := saveTCPFlagsJSON(ctx, db, snapshot, now, snapshotID); err != nil {
 		return fmt.Errorf("插入TCP标志分布统计数据失败: %w", err)
+	}
+
+	// 8. 新增: 插入服务名称扁平化统计数据
+	fmt.Println("插入服务名称分布数据...")
+	if err := saveServicesJSON(ctx, db, snapshot, now, snapshotID); err != nil {
+		return fmt.Errorf("插入服务名称分布统计数据失败: %w", err)
 	}
 
 	fmt.Println("网络流量快照已成功保存到GrepTimeDB")
@@ -404,7 +437,7 @@ func saveTCPFlagsStats(ctx context.Context, db *sql.DB, snapshot *models.Snapsho
 	return nil
 }
 
-// 新增: saveProtocolsJSON 保存协议分布统计数据（扁平化列结构）
+// saveProtocolsJSON 保存协议分布统计数据（扁平化列结构）
 func saveProtocolsJSON(ctx context.Context, db *sql.DB, snapshot *models.Snapshot, ts time.Time, snapshotID string) error {
 	// 计算总数据包数和各协议数量
 	var totalCount, tcpCount, udpCount, icmpCount, otherCount uint64
@@ -449,7 +482,7 @@ func saveProtocolsJSON(ctx context.Context, db *sql.DB, snapshot *models.Snapsho
 	return nil
 }
 
-// 新增: saveTCPFlagsJSON 保存TCP标志分布统计数据（扁平化列结构）
+// saveTCPFlagsJSON 保存TCP标志分布统计数据（扁平化列结构）
 func saveTCPFlagsJSON(ctx context.Context, db *sql.DB, snapshot *models.Snapshot, ts time.Time, snapshotID string) error {
 	// 计算总数据包数和各TCP标志数量
 	var totalCount, ackCount, synCount, finAckCount, pshAckCount, noneCount, otherCount uint64
@@ -497,6 +530,103 @@ func saveTCPFlagsJSON(ctx context.Context, db *sql.DB, snapshot *models.Snapshot
 	}
 
 	fmt.Println("- 保存了TCP标志分布数据用于饼图展示")
+	return nil
+}
+
+// 新增: saveServicesJSON 保存服务名称分布统计数据（扁平化列结构）
+func saveServicesJSON(ctx context.Context, db *sql.DB, snapshot *models.Snapshot, ts time.Time, snapshotID string) error {
+	// 初始化计数器
+	var (
+		totalCount   uint64
+		httpCount    uint64
+		httpsCount   uint64
+		sshCount     uint64
+		dnsCount     uint64
+		smtpCount    uint64
+		ftpCount     uint64
+		mysqlCount   uint64
+		ntpCount     uint64
+		telnetCount  uint64
+		rdpCount     uint64
+		unknownCount uint64
+		otherCount   uint64
+	)
+
+	// 遍历所有热门端口记录，按服务名计数
+	for _, pair := range snapshot.Port.TopPairs {
+		if pair.Count == 0 {
+			continue
+		}
+
+		totalCount += pair.Count
+
+		// 根据端口号分类到相应的服务计数器
+		switch pair.DestinationPort {
+		case 80: // HTTP
+			httpCount += pair.Count
+		case 8080: // HTTP Alternate
+			httpCount += pair.Count
+		case 443, 8443: // HTTPS
+			httpsCount += pair.Count
+		case 22: // SSH
+			sshCount += pair.Count
+		case 53: // DNS
+			dnsCount += pair.Count
+		case 25: // SMTP
+			smtpCount += pair.Count
+		case 21: // FTP
+			ftpCount += pair.Count
+		case 3306: // MySQL
+			mysqlCount += pair.Count
+		case 123: // NTP
+			ntpCount += pair.Count
+		case 23: // Telnet
+			telnetCount += pair.Count
+		case 3389: // RDP
+			rdpCount += pair.Count
+		default:
+			// 检查是否是高端口（可能是未知服务）
+			if pair.DestinationPort >= 49152 {
+				unknownCount += pair.Count
+			} else {
+				otherCount += pair.Count
+			}
+		}
+	}
+
+	// 构建并执行插入语句
+	query := `
+		INSERT INTO network_services_json(
+			snapshot_id, ts, total_packet_count, 
+			http_count, https_count, ssh_count, dns_count, smtp_count,
+			ftp_count, mysql_count, ntp_count, telnet_count, rdp_count,
+			unknown_count, other_count
+		) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`
+
+	_, err := db.ExecContext(ctx, query,
+		snapshotID,
+		ts,
+		totalCount,
+		httpCount,
+		httpsCount,
+		sshCount,
+		dnsCount,
+		smtpCount,
+		ftpCount,
+		mysqlCount,
+		ntpCount,
+		telnetCount,
+		rdpCount,
+		unknownCount,
+		otherCount,
+	)
+
+	if err != nil {
+		return fmt.Errorf("保存服务名称分布数据失败: %w", err)
+	}
+
+	fmt.Println("- 保存了服务名称分布数据用于饼图展示")
 	return nil
 }
 
